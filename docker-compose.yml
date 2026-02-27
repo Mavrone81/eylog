@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  backend-node:
+    build: ./services/backend-node
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+
+  route-optimization-python:
+    build: ./services/route-optimization-python
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: logistics
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+  mongodb_data:
