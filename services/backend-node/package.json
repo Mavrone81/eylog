@@ -1,10 +1,11 @@
 {
   "name": "backend-node",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered delivery backend",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "mocha test.js"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,14 @@
   "type": "commonjs",
   "dependencies": {
     "@apollo/server": "^5.4.0",
-    "graphql": "^16.13.0"
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "graphql": "^16.13.0",
+    "mongoose": "^8.0.0",
+    "pg": "^8.11.3",
+    "redis": "^4.6.10"
+  },
+  "devDependencies": {
+    "mocha": "^10.2.0"
   }
 }
