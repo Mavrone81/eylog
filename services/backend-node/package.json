@@ -1,17 +1,31 @@
 {
   "name": "backend-node",
   "version": "1.0.0",
-  "description": "",
+  "description": "AI-powered last-mile delivery backend",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "mocha test.js"
   },
-  "keywords": [],
+  "keywords": [
+    "delivery",
+    "logistics",
+    "ai",
+    "graphql"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@apollo/server": "^5.4.0",
-    "graphql": "^16.13.0"
+    "@apollo/server": "^5.5.0",
+    "axios": "^1.14.0",
+    "dotenv": "^17.4.0",
+    "graphql": "^16.13.0",
+    "mongoose": "^9.3.3",
+    "pg": "^8.13.0",
+    "redis": "^4.6.10"
+  },
+  "devDependencies": {
+    "mocha": "^11.0.1"
   }
 }
