@@ -44,3 +44,35 @@ A comprehensive AI-powered platform optimizing the final leg of delivery logisti
 - **Core (Months 4-6):** AI routing, customer portal, proof of delivery
 - **Advanced (Months 7-9):** Predictive ETAs, dynamic pricing, APIs
 - **Scale (Months 10-12):** ML enhancements, marketplace, expansion
+
+## Getting Started
+
+### Prerequisites
+- Docker and Docker Compose
+- Node.js 18+
+- Python 3.12+
+
+### Running the Platform
+The easiest way to run the entire platform is using Docker Compose:
+```bash
+docker-compose up --build
+```
+
+### Backend Services
+- **Node.js (GraphQL):** Port 4000
+- **Python (AI/ML):** Port 5000
+
+### Running Tests
+#### Node.js Tests
+```bash
+cd services/backend-node
+npm install
+npx mocha test.js
+```
+
+#### Python Tests
+```bash
+cd services/route-optimization-python
+pip install -r requirements.txt
+python test_optimizer.py
+```
