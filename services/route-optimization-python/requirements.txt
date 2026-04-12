@@ -1,7 +1,7 @@
 flask
+deap
 numpy
 scikit-learn
 pandas
 scipy
 tensorflow
-deap
