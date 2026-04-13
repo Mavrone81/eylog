@@ -1,7 +1,4 @@
-flask
-numpy
-scikit-learn
-pandas
-scipy
-tensorflow
-deap
+flask==3.0.3
+numpy==1.26.4
+deap==1.4.1
+requests==2.31.0
