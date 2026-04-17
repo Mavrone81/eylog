@@ -1,33 +1,11 @@
+require('dotenv').config();
 const { ApolloServer } = require('@apollo/server');
 const { startStandaloneServer } = require('@apollo/server/standalone');
+const { connectDB } = require('./db');
+const typeDefs = require('./schema');
+const resolvers = require('./resolvers');
 
-const typeDefs = `#graphql
-  type Delivery {
-    id: ID!
-    status: String
-    origin: String
-    destination: String
-  }
-
-  type Query {
-    deliveries: [Delivery]
-  }
-`;
-
-const deliveries = [
-  {
-    id: '1',
-    status: 'IN_TRANSIT',
-    origin: 'Distribution Center A',
-    destination: '123 Main St',
-  },
-];
-
-const resolvers = {
-  Query: {
-    deliveries: () => deliveries,
-  },
-};
+const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:5000';
 
 const server = new ApolloServer({
   typeDefs,
@@ -35,10 +13,20 @@ const server = new ApolloServer({
 });
 
 if (require.main === module) {
-  startStandaloneServer(server, {
-    listen: { port: 4000 },
-  }).then(({ url }) => {
-    console.log(`🚀  Server ready at ${url}`);
+  connectDB().then(({ pgPool, redisClient }) => {
+    startStandaloneServer(server, {
+      listen: { port: 4000 },
+      context: async () => ({
+        pgPool,
+        redisClient,
+        pythonServiceUrl,
+      }),
+    }).then(({ url }) => {
+      console.log(`🚀  Server ready at ${url}`);
+    });
+  }).catch(err => {
+    console.error('Failed to connect to databases', err);
+    process.exit(1);
   });
 }
 
