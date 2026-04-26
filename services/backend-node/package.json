@@ -4,14 +4,22 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@apollo/server": "^5.4.0",
-    "graphql": "^16.13.0"
+    "@apollo/server": "^5.5.0",
+    "graphql": "^16.11.0",
+    "mongoose": "^8.12.1",
+    "axios": "^1.7.9",
+    "redis": "^4.7.0",
+    "pg": "^8.13.3",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "mocha": "^11.1.0"
   }
 }
