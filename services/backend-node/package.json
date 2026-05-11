@@ -1,17 +1,23 @@
 {
   "name": "backend-node",
   "version": "1.0.0",
-  "description": "",
+  "description": "Last-mile delivery logistics backend",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@apollo/server": "^5.4.0",
-    "graphql": "^16.13.0"
+    "@apollo/server": "5.5.1",
+    "axios": "1.16.0",
+    "mongoose": "8.23.1",
+    "redis": "4.7.1",
+    "pg": "8.20.0",
+    "graphql": "16.13.0",
+    "mocha": "11.7.5",
+    "dotenv": "16.4.7"
   }
 }
