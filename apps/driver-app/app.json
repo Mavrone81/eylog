@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "driver-app",
+    "slug": "driver-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsImplicitScrolling": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
