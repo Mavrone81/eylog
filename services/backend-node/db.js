@@ -1,0 +1,46 @@
+const { Pool } = require('pg');
+const mongoose = require('mongoose');
+const { createClient } = require('redis');
+const fs = require('fs').promises;
+const path = require('path');
+require('dotenv').config();
+
+let poolPromise;
+let mongoPromise;
+let redisPromise;
+
+async function getDB() {
+  if (!poolPromise) {
+    poolPromise = (async () => {
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+      });
+      const initSqlPath = path.join(__dirname, 'init.sql');
+      const initSql = await fs.readFile(initSqlPath, 'utf8');
+      await pool.query(initSql);
+      return pool;
+    })();
+  }
+
+  if (!mongoPromise) {
+    mongoPromise = mongoose.connect(process.env.MONGODB_URI);
+  }
+
+  if (!redisPromise) {
+    redisPromise = (async () => {
+      const client = createClient({
+        url: process.env.REDIS_URL,
+      });
+      client.on('error', (err) => console.error('Redis Client Error', err));
+      await client.connect();
+      return client;
+    })();
+  }
+
+  const [pool, redis] = await Promise.all([poolPromise, redisPromise]);
+  await mongoPromise;
+
+  return { pool, mongo: mongoose.connection, redis };
+}
+
+module.exports = { getDB };
