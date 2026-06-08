@@ -7,10 +7,15 @@ services:
       - "4000:4000"
     environment:
       - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/logistics
+      - DATABASE_URL=postgres://user:password@postgres:5432/logistics
+      - REDIS_URL=redis://redis:6379
+      - OPTIMIZATION_SERVICE_URL=http://route-optimization-python:5000/optimize
     depends_on:
       - postgres
       - mongodb
       - redis
+      - route-optimization-python
 
   route-optimization-python:
     build: ./services/route-optimization-python
