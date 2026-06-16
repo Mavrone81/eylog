@@ -67,6 +67,7 @@ const typeDefs = `#graphql
     createDelivery(customerId: ID!, origin: LocationInput!, destination: LocationInput!): Delivery
     assignDriver(deliveryId: ID!, driverId: ID!): Delivery
     updateDeliveryStatus(id: ID!, status: String!): Delivery
+    updateDriverLocation(id: ID!, location: LocationInput!): Driver
     optimizeRoute(locations: [LocationInput]!): OptimizedRoute
   }
 `;
@@ -118,6 +119,10 @@ const resolvers = {
           { new: true, session }
         ).populate('customer').populate('driver').exec();
 
+        if (!delivery) {
+          throw new Error('Delivery not found');
+        }
+
         driver.status = 'BUSY';
         await driver.save({ session });
 
@@ -139,6 +144,23 @@ const resolvers = {
         session.endSession();
       }
     },
+    updateDriverLocation: async (_, { id, location }) => {
+      const { redisClient } = db.getDB();
+      const driver = await Driver.findByIdAndUpdate(
+        id,
+        { current_location: location },
+        { new: true }
+      ).exec();
+
+      if (!driver) {
+        throw new Error('Driver not found');
+      }
+
+      // Update Redis for real-time tracking
+      await redisClient.set(`driver:${id}:location`, JSON.stringify(location));
+
+      return driver;
+    },
     updateDeliveryStatus: async (_, { id, status }) => {
       const { mongooseConnection, pgPool, redisClient } = db.getDB();
       const session = await mongooseConnection.startSession();
@@ -150,11 +172,17 @@ const resolvers = {
           { new: true, session }
         ).populate('customer').populate('driver').exec();
 
-        if (status === 'DELIVERED' && delivery.driver) {
+        if (!delivery) {
+          throw new Error('Delivery not found');
+        }
+
+        if ((status === 'DELIVERED' || status === 'CANCELLED') && delivery.driver) {
           const driver = await Driver.findById(delivery.driver._id).session(session);
-          driver.status = 'AVAILABLE';
-          await driver.save({ session });
-          await redisClient.set(`driver:${driver._id}:status`, 'AVAILABLE');
+          if (driver) {
+            driver.status = 'AVAILABLE';
+            await driver.save({ session });
+            await redisClient.set(`driver:${driver._id}:status`, 'AVAILABLE');
+          }
         }
 
         await pgPool.query(
