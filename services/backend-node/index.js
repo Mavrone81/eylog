@@ -67,6 +67,7 @@ const typeDefs = `#graphql
     createDelivery(customerId: ID!, origin: LocationInput!, destination: LocationInput!): Delivery
     assignDriver(deliveryId: ID!, driverId: ID!): Delivery
     updateDeliveryStatus(id: ID!, status: String!): Delivery
+    updateDriverLocation(id: ID!, location: LocationInput!): Driver
     optimizeRoute(locations: [LocationInput]!): OptimizedRoute
   }
 `;
@@ -170,6 +171,21 @@ const resolvers = {
       } finally {
         session.endSession();
       }
+    },
+    updateDriverLocation: async (_, { id, location }) => {
+      const { redisClient } = db.getDB();
+      const driver = await Driver.findByIdAndUpdate(
+        id,
+        { current_location: location },
+        { new: true }
+      ).exec();
+
+      if (!driver) {
+        throw new Error('Driver not found');
+      }
+
+      await redisClient.set(`driver:${id}:location`, JSON.stringify(location));
+      return driver;
     },
     optimizeRoute: async (_, { locations }) => {
       const url = process.env.OPTIMIZATION_SERVICE_URL || 'http://localhost:5000/optimize';

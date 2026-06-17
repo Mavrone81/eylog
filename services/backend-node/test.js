@@ -82,4 +82,36 @@ describe('GraphQL Resolvers', () => {
       }
     });
   });
+
+  describe('Mutation.updateDriverLocation', () => {
+    it('should update driver location in MongoDB and Redis', async () => {
+      const driverId = 'driver123';
+      const newLocation = { lat: 40.7128, lng: -74.0060, address: 'New York, NY' };
+      const mockDriver = { _id: driverId, current_location: newLocation };
+
+      const findByIdAndUpdateStub = sinon.stub(Driver, 'findByIdAndUpdate').returns({
+        exec: sinon.stub().resolves(mockDriver)
+      });
+
+      const result = await resolvers.Mutation.updateDriverLocation(null, { id: driverId, location: newLocation });
+
+      expect(result).to.equal(mockDriver);
+      expect(findByIdAndUpdateStub.calledWith(driverId, { current_location: newLocation }, { new: true })).to.be.true;
+      const { redisClient } = db.getDB();
+      expect(redisClient.set.calledWith(`driver:${driverId}:location`, JSON.stringify(newLocation))).to.be.true;
+    });
+
+    it('should throw error if driver not found', async () => {
+      sinon.stub(Driver, 'findByIdAndUpdate').returns({
+        exec: sinon.stub().resolves(null)
+      });
+
+      try {
+        await resolvers.Mutation.updateDriverLocation(null, { id: 'nonexistent', location: {} });
+        expect.fail('Should have thrown error');
+      } catch (error) {
+        expect(error.message).to.equal('Driver not found');
+      }
+    });
+  });
 });
