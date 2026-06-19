@@ -6,6 +6,7 @@ const db = require('./db');
 const Driver = require('./models/Driver');
 const Delivery = require('./models/Delivery');
 const Customer = require('./models/Customer');
+const { sendSMS } = require('./utils/sms');
 
 const typeDefs = `#graphql
   scalar DateTime
@@ -34,6 +35,7 @@ const typeDefs = `#graphql
     id: ID!
     name: String!
     email: String!
+    phone: String
     address: Location
   }
 
@@ -67,6 +69,7 @@ const typeDefs = `#graphql
     createDelivery(customerId: ID!, origin: LocationInput!, destination: LocationInput!): Delivery
     assignDriver(deliveryId: ID!, driverId: ID!): Delivery
     updateDeliveryStatus(id: ID!, status: String!): Delivery
+    updateDriverLocation(id: ID!, location: LocationInput!): Driver
     optimizeRoute(locations: [LocationInput]!): OptimizedRoute
   }
 `;
@@ -100,7 +103,12 @@ const resolvers = {
         [delivery.id, 'DELIVERY_CREATED', JSON.stringify(delivery)]
       );
 
-      return delivery.populate('customer');
+      const populatedDelivery = await delivery.populate('customer');
+      if (populatedDelivery.customer && populatedDelivery.customer.phone) {
+        sendSMS(populatedDelivery.customer.phone, `Your delivery #${delivery.id} has been created.`);
+      }
+
+      return populatedDelivery;
     },
     assignDriver: async (_, { deliveryId, driverId }) => {
       const { mongooseConnection, pgPool, redisClient } = db.getDB();
@@ -131,6 +139,10 @@ const resolvers = {
         // Update Redis cache for driver status
         await redisClient.set(`driver:${driverId}:status`, 'BUSY');
 
+        if (delivery.customer && delivery.customer.phone) {
+          sendSMS(delivery.customer.phone, `Driver ${driver.name} has been assigned to your delivery #${deliveryId}.`);
+        }
+
         return delivery;
       } catch (error) {
         await session.abortTransaction();
@@ -150,7 +162,7 @@ const resolvers = {
           { new: true, session }
         ).populate('customer').populate('driver').exec();
 
-        if (status === 'DELIVERED' && delivery.driver) {
+        if ((status === 'DELIVERED' || status === 'CANCELLED') && delivery.driver) {
           const driver = await Driver.findById(delivery.driver._id).session(session);
           driver.status = 'AVAILABLE';
           await driver.save({ session });
@@ -163,6 +175,11 @@ const resolvers = {
         );
 
         await session.commitTransaction();
+
+        if (delivery.customer && delivery.customer.phone) {
+          sendSMS(delivery.customer.phone, `Your delivery #${id} status has been updated to ${status}.`);
+        }
+
         return delivery;
       } catch (error) {
         await session.abortTransaction();
@@ -170,6 +187,22 @@ const resolvers = {
       } finally {
         session.endSession();
       }
+    },
+    updateDriverLocation: async (_, { id, location }) => {
+      const { redisClient } = db.getDB();
+      const driver = await Driver.findByIdAndUpdate(
+        id,
+        { current_location: location },
+        { new: true }
+      ).exec();
+
+      if (!driver) {
+        throw new Error('Driver not found');
+      }
+
+      await redisClient.set(`driver:${id}:location`, JSON.stringify(location));
+
+      return driver;
     },
     optimizeRoute: async (_, { locations }) => {
       const url = process.env.OPTIMIZATION_SERVICE_URL || 'http://localhost:5000/optimize';
