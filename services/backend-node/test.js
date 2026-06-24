@@ -5,9 +5,11 @@ const Driver = require('./models/Driver');
 const Delivery = require('./models/Delivery');
 const Customer = require('./models/Customer');
 const db = require('./db');
+const sms = require('./utils/sms');
 
 describe('GraphQL Resolvers', () => {
   let dbStub;
+  let smsStub;
 
   beforeEach(() => {
     dbStub = sinon.stub(db, 'getDB').returns({
@@ -22,6 +24,7 @@ describe('GraphQL Resolvers', () => {
         })
       }
     });
+    smsStub = sinon.stub(sms, 'sendSMS');
   });
 
   afterEach(() => {
@@ -46,8 +49,12 @@ describe('GraphQL Resolvers', () => {
     it('should assign an available driver to a delivery', async () => {
       const driverId = 'driver123';
       const deliveryId = 'delivery456';
-      const mockDriver = { _id: driverId, status: 'AVAILABLE', save: sinon.stub().resolves() };
-      const mockDelivery = { id: deliveryId, status: 'ASSIGNED' };
+      const mockDriver = { _id: driverId, status: 'AVAILABLE', name: 'John Doe', save: sinon.stub().resolves() };
+      const mockDelivery = {
+        id: deliveryId,
+        status: 'ASSIGNED',
+        customer: { phone: '1234567890' }
+      };
 
       sinon.stub(Driver, 'findById').returns({
         session: sinon.stub().resolves(mockDriver)
@@ -64,6 +71,7 @@ describe('GraphQL Resolvers', () => {
 
       expect(result).to.equal(mockDelivery);
       expect(mockDriver.status).to.equal('BUSY');
+      expect(smsStub.calledOnce).to.be.true;
     });
 
     it('should throw error if driver is not available', async () => {
@@ -80,6 +88,77 @@ describe('GraphQL Resolvers', () => {
       } catch (error) {
         expect(error.message).to.equal('Driver not available');
       }
+    });
+  });
+
+  describe('Mutation.updateDeliveryStatus', () => {
+    it('should update status and release driver if DELIVERED', async () => {
+      const deliveryId = 'del123';
+      const driverId = 'drv123';
+      const mockDriver = { _id: driverId, status: 'BUSY', save: sinon.stub().resolves() };
+      const mockDelivery = {
+        id: deliveryId,
+        status: 'DELIVERED',
+        driver: { _id: driverId },
+        customer: { phone: '1234567890' }
+      };
+
+      sinon.stub(Delivery, 'findByIdAndUpdate').returns({
+        populate: sinon.stub().returnsThis(),
+        exec: sinon.stub().resolves(mockDelivery)
+      });
+      sinon.stub(Driver, 'findById').returns({
+        session: sinon.stub().resolves(mockDriver)
+      });
+
+      const result = await resolvers.Mutation.updateDeliveryStatus(null, { id: deliveryId, status: 'DELIVERED' });
+
+      expect(result.status).to.equal('DELIVERED');
+      expect(mockDriver.status).to.equal('AVAILABLE');
+      expect(smsStub.calledOnce).to.be.true;
+    });
+
+    it('should release driver if status is CANCELLED', async () => {
+      const deliveryId = 'del123';
+      const driverId = 'drv123';
+      const mockDriver = { _id: driverId, status: 'BUSY', save: sinon.stub().resolves() };
+      const mockDelivery = {
+        id: deliveryId,
+        status: 'CANCELLED',
+        driver: { _id: driverId },
+        customer: { phone: '1234567890' }
+      };
+
+      sinon.stub(Delivery, 'findByIdAndUpdate').returns({
+        populate: sinon.stub().returnsThis(),
+        exec: sinon.stub().resolves(mockDelivery)
+      });
+      sinon.stub(Driver, 'findById').returns({
+        session: sinon.stub().resolves(mockDriver)
+      });
+
+      const result = await resolvers.Mutation.updateDeliveryStatus(null, { id: deliveryId, status: 'CANCELLED' });
+
+      expect(result.status).to.equal('CANCELLED');
+      expect(mockDriver.status).to.equal('AVAILABLE');
+    });
+  });
+
+  describe('Mutation.updateDriverLocation', () => {
+    it('should update driver location in MongoDB and Redis', async () => {
+      const driverId = 'drv123';
+      const location = { lat: 10.5, lng: 20.5, address: 'Test St' };
+      const mockDriver = { id: driverId, current_location: location };
+
+      sinon.stub(Driver, 'findByIdAndUpdate').returns({
+        exec: sinon.stub().resolves(mockDriver)
+      });
+
+      const result = await resolvers.Mutation.updateDriverLocation(null, { id: driverId, location });
+
+      expect(result).to.equal(mockDriver);
+      const { redisClient } = db.getDB();
+      expect(redisClient.set.calledWith(`driver:${driverId}:location`, JSON.stringify(location))).to.be.true;
     });
   });
 });
