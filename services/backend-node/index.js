@@ -6,6 +6,7 @@ const db = require('./db');
 const Driver = require('./models/Driver');
 const Delivery = require('./models/Delivery');
 const Customer = require('./models/Customer');
+const sms = require('./utils/sms');
 
 const typeDefs = `#graphql
   scalar DateTime
@@ -26,6 +27,7 @@ const typeDefs = `#graphql
     id: ID!
     name: String!
     vehicle_type: String!
+    phone: String
     status: String!
     current_location: Location
   }
@@ -34,6 +36,7 @@ const typeDefs = `#graphql
     id: ID!
     name: String!
     email: String!
+    phone: String
     address: Location
   }
 
@@ -67,6 +70,7 @@ const typeDefs = `#graphql
     createDelivery(customerId: ID!, origin: LocationInput!, destination: LocationInput!): Delivery
     assignDriver(deliveryId: ID!, driverId: ID!): Delivery
     updateDeliveryStatus(id: ID!, status: String!): Delivery
+    updateDriverLocation(id: ID!, location: LocationInput!): Driver
     optimizeRoute(locations: [LocationInput]!): OptimizedRoute
   }
 `;
@@ -86,28 +90,73 @@ const resolvers = {
         throw new Error('Invalid coordinates');
       }
 
-      const delivery = new Delivery({
-        customer: customerId,
-        origin,
-        destination,
-        status: 'PENDING'
-      });
-      await delivery.save();
+      const { mongooseConnection, pgPool } = db.getDB();
+      const session = await mongooseConnection.startSession();
+      session.startTransaction();
 
-      const { pgPool } = db.getDB();
-      await pgPool.query(
-        'INSERT INTO delivery_events (delivery_id, event_type, payload) VALUES ($1, $2, $3)',
-        [delivery.id, 'DELIVERY_CREATED', JSON.stringify(delivery)]
-      );
+      try {
+        const delivery = new Delivery({
+          customer: customerId,
+          origin,
+          destination,
+          status: 'PENDING'
+        });
+        await delivery.save({ session });
 
-      return delivery.populate('customer');
+        await delivery.populate('customer');
+
+        await pgPool.query(
+          'INSERT INTO delivery_events (delivery_id, event_type, payload) VALUES ($1, $2, $3)',
+          [delivery.id, 'DELIVERY_CREATED', JSON.stringify(delivery)]
+        );
+
+        await session.commitTransaction();
+
+        if (delivery.customer && delivery.customer.phone) {
+          sms.sendSMS(delivery.customer.phone, `Your delivery #${delivery.id} has been created.`);
+        }
+
+        return delivery;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    },
+    updateDriverLocation: async (_, { id, location }) => {
+      const { mongooseConnection, redisClient } = db.getDB();
+      const session = await mongooseConnection.startSession();
+      session.startTransaction();
+      try {
+        const driver = await Driver.findByIdAndUpdate(
+          id,
+          { current_location: location },
+          { new: true, session }
+        ).exec();
+
+        if (!driver) {
+          throw new Error('Driver not found');
+        }
+
+        await session.commitTransaction();
+
+        await redisClient.set(`driver:${id}:location`, JSON.stringify(location));
+
+        return driver;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
     },
     assignDriver: async (_, { deliveryId, driverId }) => {
       const { mongooseConnection, pgPool, redisClient } = db.getDB();
       const session = await mongooseConnection.startSession();
       session.startTransaction();
       try {
-        const driver = await Driver.findById(driverId).session(session);
+        const driver = await Driver.findById(driverId).session(session).exec();
         if (!driver || driver.status !== 'AVAILABLE') {
           throw new Error('Driver not available');
         }
@@ -117,6 +166,10 @@ const resolvers = {
           { driver: driverId, status: 'ASSIGNED' },
           { new: true, session }
         ).populate('customer').populate('driver').exec();
+
+        if (!delivery) {
+          throw new Error('Delivery not found');
+        }
 
         driver.status = 'BUSY';
         await driver.save({ session });
@@ -130,6 +183,10 @@ const resolvers = {
 
         // Update Redis cache for driver status
         await redisClient.set(`driver:${driverId}:status`, 'BUSY');
+
+        if (delivery.customer && delivery.customer.phone) {
+          sms.sendSMS(delivery.customer.phone, `Driver ${driver.name} has been assigned to your delivery.`);
+        }
 
         return delivery;
       } catch (error) {
@@ -150,11 +207,16 @@ const resolvers = {
           { new: true, session }
         ).populate('customer').populate('driver').exec();
 
-        if (status === 'DELIVERED' && delivery.driver) {
-          const driver = await Driver.findById(delivery.driver._id).session(session);
+        if (!delivery) {
+          throw new Error('Delivery not found');
+        }
+
+        let driverToUpdate = null;
+        if ((status === 'DELIVERED' || status === 'CANCELLED') && delivery.driver) {
+          const driver = await Driver.findById(delivery.driver._id).session(session).exec();
           driver.status = 'AVAILABLE';
           await driver.save({ session });
-          await redisClient.set(`driver:${driver._id}:status`, 'AVAILABLE');
+          driverToUpdate = driver;
         }
 
         await pgPool.query(
@@ -163,6 +225,15 @@ const resolvers = {
         );
 
         await session.commitTransaction();
+
+        if (driverToUpdate) {
+          await redisClient.set(`driver:${driverToUpdate._id}:status`, 'AVAILABLE');
+        }
+
+        if (delivery.customer && delivery.customer.phone) {
+          sms.sendSMS(delivery.customer.phone, `Your delivery #${delivery.id} status is now ${status}.`);
+        }
+
         return delivery;
       } catch (error) {
         await session.abortTransaction();
