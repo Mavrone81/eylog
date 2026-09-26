@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const DriverSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  phone: String,
   vehicle_type: { type: String, required: true },
   status: {
     type: String,
